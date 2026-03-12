@@ -87,21 +87,27 @@
     let audioCtx = null;
 
     function unlockAudio() {
+      if (audioCtx) return;
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      const buf = audioCtx.createBuffer(1, 1, 22050);
+      const buf = audioCtx.createBuffer(1, 1, audioCtx.sampleRate);
       const src = audioCtx.createBufferSource();
       src.buffer = buf;
       src.connect(audioCtx.destination);
       src.start(0);
-      audioCtx.resume().then(() => {
+      src.onended = () => {
+        audioCtx.resume().then(() => {
+          document.getElementById('unlock-screen').style.display = 'none';
+        });
+      };
+      setTimeout(() => {
         document.getElementById('unlock-screen').style.display = 'none';
-      });
+      }, 500);
     }
 
-    document.getElementById('unlock-btn').addEventListener('touchend', e => {
+    document.getElementById('unlock-btn').addEventListener('touchstart', e => {
       e.preventDefault();
       unlockAudio();
-    });
+    }, { passive: false });
     document.getElementById('unlock-btn').addEventListener('click', unlockAudio);
 
     function midiToFreq(m) { return 440 * Math.pow(2, (m - 69) / 12); }
