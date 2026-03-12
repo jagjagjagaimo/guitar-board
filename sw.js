@@ -1,4 +1,4 @@
-const CACHE = 'guitar-board-v8';
+const CACHE = 'guitar-board-v9';
 const FILES = ['/', '/index.html', '/manifest.json'];
 
 self.addEventListener('install', e => {
