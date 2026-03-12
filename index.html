@@ -53,7 +53,7 @@
 <body>
   <div id="header">
     <span>14 strings · 23 frets</span>
-    <span id="status-msg">まず1つタップして開始</span>
+    <span>タップで演奏</span>
   </div>
   <div id="fb-info">— 音符をタップ —</div>
   <div id="fb-wrap">
@@ -65,65 +65,47 @@
     const OPEN_MIDI = [86,81,76,71,66,61,56,51,46,41,36,31,26,21];
     const NUM_FRETS = 23;
     let audioCtx = null;
-    let unlocked = false;
 
-    function initAudio() {
-      if (audioCtx) return audioCtx;
-      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    function getAudio() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
       return audioCtx;
-    }
-
-    function ensureUnlocked(ctx) {
-      if (unlocked) return Promise.resolve();
-      return new Promise(resolve => {
-        const buf = ctx.createBuffer(1, 1, ctx.sampleRate);
-        const src = ctx.createBufferSource();
-        src.buffer = buf;
-        src.connect(ctx.destination);
-        src.start(0);
-        src.onended = () => {
-          ctx.resume().then(() => {
-            unlocked = true;
-            document.getElementById('status-msg').textContent = 'タップで演奏';
-            resolve();
-          });
-        };
-        ctx.resume().then(() => {
-          unlocked = true;
-          document.getElementById('status-msg').textContent = 'タップで演奏';
-          resolve();
-        });
-      });
     }
 
     function midiToFreq(m) { return 440 * Math.pow(2, (m - 69) / 12); }
     function midiToName(m) { return NOTE_NAMES[m % 12] + (Math.floor(m / 12) - 1); }
 
     function playPluck(freq) {
-      const ctx = initAudio();
-      ensureUnlocked(ctx).then(() => {
-        const now = ctx.currentTime;
-        const dur = Math.min(2.8, 0.5 + 2.3 * Math.pow(freq / 500, -0.4));
-        const osc1 = ctx.createOscillator();
-        const osc2 = ctx.createOscillator();
-        const osc3 = ctx.createOscillator();
-        const g1 = ctx.createGain(), g2 = ctx.createGain(), g3 = ctx.createGain();
-        const master = ctx.createGain();
-        const filter = ctx.createBiquadFilter();
-        filter.type = 'lowpass';
-        filter.frequency.setValueAtTime(freq * 6, now);
-        filter.frequency.exponentialRampToValueAtTime(freq * 1.5, now + dur * 0.6);
-        filter.Q.value = 1.2;
-        osc1.type = 'triangle'; osc2.type = 'sawtooth'; osc3.type = 'sine';
-        osc1.frequency.value = freq; osc2.frequency.value = freq; osc3.frequency.value = freq * 2;
-        g1.gain.value = 0.45; g2.gain.value = 0.15; g3.gain.value = 0.12;
-        master.gain.setValueAtTime(0.001, now);
-        master.gain.linearRampToValueAtTime(0.55, now + 0.008);
-        master.gain.exponentialRampToValueAtTime(0.001, now + dur);
-        osc1.connect(g1); osc2.connect(g2); osc3.connect(g3);
-        g1.connect(filter); g2.connect(filter); g3.connect(filter);
-        filter.connect(master); master.connect(ctx.destination);
-        [osc1, osc2, osc3].forEach(o => { o.start(now); o.stop(now + dur + 0.05); });
+      const ctx = getAudio();
+      const now = ctx.currentTime;
+      const dur = Math.min(2.8, 0.5 + 2.3 * Math.pow(freq / 500, -0.4));
+
+      const master = ctx.createGain();
+      master.gain.setValueAtTime(0.001, now);
+      master.gain.linearRampToValueAtTime(0.6, now + 0.01);
+      master.gain.exponentialRampToValueAtTime(0.001, now + dur);
+      master.connect(ctx.destination);
+
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(freq * 5, now);
+      filter.frequency.exponentialRampToValueAtTime(freq * 1.5, now + dur * 0.5);
+      filter.connect(master);
+
+      [[' triangle', 0.5], ['sawtooth', 0.2], ['sine', 0.15]].forEach(([type, vol]) => {
+        const osc = ctx.createOscillator();
+        const g = ctx.createGain();
+        osc.type = type.trim();
+        osc.frequency.value = freq;
+        g.gain.value = vol;
+        osc.connect(g);
+        g.connect(filter);
+        osc.start(now);
+        osc.stop(now + dur + 0.05);
       });
     }
 
