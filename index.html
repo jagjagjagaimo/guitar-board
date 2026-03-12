@@ -41,7 +41,6 @@
       font-size: 11px; font-weight: 500;
       background: #2a2a2a; border: 0.5px solid #444; color: #ccc;
       user-select: none;
-      touch-action: none;
     }
     .nc.c-note { background: #cc0000; color: #fff; border-color: #990000; }
     .nc.lit { background: #ff9900 !important; color: #fff !important; border-color: #cc7700 !important; }
@@ -124,10 +123,12 @@
     });
 
     const touchLit = {};
+    const touchStart = {};
 
     function highlightOn(touchId, cell) {
       const name = cell.dataset.name;
       const cells = cellsByName[name] || [];
+      if (touchLit[touchId]) touchLit[touchId].forEach(c => c.classList.remove('lit', 'lit-main'));
       touchLit[touchId] = cells;
       cells.forEach(c => c.classList.add('lit'));
       cell.classList.remove('lit');
@@ -139,26 +140,38 @@
       if (!touchLit[touchId]) return;
       touchLit[touchId].forEach(c => c.classList.remove('lit', 'lit-main'));
       delete touchLit[touchId];
+      delete touchStart[touchId];
     }
 
     grid.addEventListener('touchstart', e => {
       Array.from(e.changedTouches).forEach(touch => {
         const el = document.elementFromPoint(touch.clientX, touch.clientY);
         if (el && el.classList.contains('nc')) {
-          e.preventDefault();
-          highlightOn(touch.identifier, el);
-          playPluck(midiToFreq(parseInt(el.dataset.midi)));
+          touchStart[touch.identifier] = { x: touch.clientX, y: touch.clientY, cell: el };
         }
       });
-    }, { passive: false });
+    }, { passive: true });
 
     grid.addEventListener('touchend', e => {
-      Array.from(e.changedTouches).forEach(touch => highlightOff(touch.identifier));
-    }, { passive: false });
+      Array.from(e.changedTouches).forEach(touch => {
+        const start = touchStart[touch.identifier];
+        if (start) {
+          const dx = Math.abs(touch.clientX - start.x);
+          const dy = Math.abs(touch.clientY - start.y);
+          if (dx < 8 && dy < 8) {
+            highlightOn(touch.identifier, start.cell);
+            playPluck(midiToFreq(parseInt(start.cell.dataset.midi)));
+            setTimeout(() => highlightOff(touch.identifier), 600);
+          } else {
+            highlightOff(touch.identifier);
+          }
+        }
+      });
+    }, { passive: true });
 
     grid.addEventListener('touchcancel', e => {
       Array.from(e.changedTouches).forEach(touch => highlightOff(touch.identifier));
-    }, { passive: false });
+    }, { passive: true });
 
     grid.addEventListener('click', e => {
       const cell = e.target.closest('.nc');
