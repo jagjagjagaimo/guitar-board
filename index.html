@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Guitar Board">
+  <link rel="manifest" href="manifest.json">
+  <title>Guitar Fretboard</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #1a1a1a;
+      color: #eee;
+      font-family: system-ui, sans-serif;
+      overflow-x: auto;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: pan-x pan-y;
+    }
+    #header {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 10px 14px 6px;
+      font-size: 13px; color: #888;
+      position: sticky; left: 0;
+    }
+    #fb-info {
+      text-align: center;
+      font-size: 15px; font-weight: 500;
+      color: #aaa;
+      padding: 6px 0 8px;
+      min-height: 32px;
+      position: sticky; left: 0;
+    }
+    #fb-wrap { overflow-x: auto; padding: 0 8px 24px; }
+    #fb-grid {
+      display: grid;
+      grid-template-columns: repeat(23, 48px);
+      gap: 3px;
+      min-width: max-content;
+    }
+    .nc {
+      width: 48px; height: 48px;
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 0;
+      cursor: pointer;
+      font-size: 11px; font-weight: 500;
+      background: #2a2a2a;
+      border: 0.5px solid #444;
+      color: #ccc;
+      user-select: none;
+    }
+    .nc.c-note { background: #cc0000; color: #fff; border-color: #990000; }
+    .nc.lit { background: #ff9900 !important; color: #fff !important; border-color: #cc7700 !important; }
+    .nc.lit-main {
+      background: #ff6600 !important; color: #fff !important;
+      border-color: #cc4400 !important;
+      outline: 2px solid #ff6600; outline-offset: 1px;
+    }
+  </style>
+</head>
+<body>
+  <div id="header">
+    <span>14 strings · 23 frets</span>
+    <span>タップで演奏</span>
+  </div>
+  <div id="fb-info">— 音符をタップ —</div>
+  <div id="fb-wrap">
+    <div id="fb-grid"></div>
+  </div>
+
+  <script>
+    const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+    const OPEN_MIDI = [86,81,76,71,66,61,56,51,46,41,36,31,26,21];
+    const NUM_FRETS = 23;
+    let audioCtx = null;
+
+    function getCtx() {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      return audioCtx;
+    }
+    function midiToFreq(m) { return 440 * Math.pow(2, (m - 69) / 12); }
+    function midiToName(m) { return NOTE_NAMES[m % 12] + (Math.floor(m / 12) - 1); }
+
+    function playPluck(freq) {
+      const ctx = getCtx();
+      const now = ctx.currentTime;
+      const dur = Math.min(2.8, 0.5 + 2.3 * Math.pow(freq / 500, -0.4));
+      const osc1 = ctx.createOscillator();
+      const osc2 = ctx.createOscillator();
+      const osc3 = ctx.createOscillator();
+      const g1 = ctx.createGain(), g2 = ctx.createGain(), g3 = ctx.createGain();
+      const master = ctx.createGain();
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(freq * 6, now);
+      filter.frequency.exponentialRampToValueAtTime(freq * 1.5, now + dur * 0.6);
+      filter.Q.value = 1.2;
+      osc1.type = 'triangle'; osc2.type = 'sawtooth'; osc3.type = 'sine';
+      osc1.frequency.value = freq; osc2.frequency.value = freq; osc3.frequency.value = freq * 2;
+      g1.gain.value = 0.45; g2.gain.value = 0.15; g3.gain.value = 0.12;
+      master.gain.setValueAtTime(0.001, now);
+      master.gain.linearRampToValueAtTime(0.55, now + 0.008);
+      master.gain.exponentialRampToValueAtTime(0.001, now + dur);
+      osc1.connect(g1); osc2.connect(g2); osc3.connect(g3);
+      g1.connect(filter); g2.connect(filter); g3.connect(filter);
+      filter.connect(master); master.connect(ctx.destination);
+      [osc1, osc2, osc3].forEach(o => { o.start(now); o.stop(now + dur + 0.05); });
+    }
+
+    const grid = document.getElementById('fb-grid');
+    const info = document.getElementById('fb-info');
+    const cellsByName = {};
+    let currentLit = [];
+
+    OPEN_MIDI.forEach(openMidi => {
+      for (let fret = 0; fret < NUM_FRETS; fret++) {
+        const midi = openMidi + fret;
+        const name = midiToName(midi);
+        const cell = document.createElement('div');
+        cell.className = 'nc' + ((midi % 12 === 0) ? ' c-note' : '');
+        cell.textContent = name;
+        cell.dataset.midi = midi;
+        cell.dataset.name = name;
+        if (!cellsByName[name]) cellsByName[name] = [];
+        cellsByName[name].push(cell);
+        grid.appendChild(cell);
+      }
+    });
+
+    function triggerCell(cell) {
+      const name = cell.dataset.name;
+      const midi = parseInt(cell.dataset.midi);
+      currentLit.forEach(c => c.classList.remove('lit', 'lit-main'));
+      currentLit = [];
+      (cellsByName[name] || []).forEach(c => {
+        c.classList.add('lit');
+        currentLit.push(c);
+      });
+      cell.classList.remove('lit');
+      cell.classList.add('lit-main');
+      info.textContent = '♪  ' + name + '  (' + Math.round(midiToFreq(midi)) + ' Hz)';
+      playPluck(midiToFreq(midi));
+    }
+
+    grid.addEventListener('touchstart', e => {
+      e.preventDefault();
+      Array.from(e.changedTouches).forEach(touch => {
+        const el = document.elementFromPoint(touch.clientX, touch.clientY);
+        if (el && el.classList.contains('nc')) triggerCell(el);
+      });
+    }, { passive: false });
+
+    grid.addEventListener('click', e => {
+      const cell = e.target.closest('.nc');
+      if (cell) triggerCell(cell);
+    });
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js');
+    }
+  </script>
+</body>
+</html>
