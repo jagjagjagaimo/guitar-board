@@ -11,43 +11,48 @@
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      background: #1a1a1a;
-      color: #eee;
+      background: #1a1a1a; color: #eee;
       font-family: system-ui, sans-serif;
       overflow-x: auto;
       -webkit-tap-highlight-color: transparent;
       touch-action: pan-x pan-y;
     }
+    #unlock-screen {
+      position: fixed; inset: 0;
+      background: #1a1a1a;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 20px; z-index: 100;
+    }
+    #unlock-btn {
+      background: #cc0000; color: #fff;
+      border: none; border-radius: 0;
+      font-size: 20px; font-weight: 600;
+      padding: 20px 48px; cursor: pointer;
+    }
+    #unlock-screen p { color: #888; font-size: 14px; }
     #header {
       display: flex; justify-content: space-between; align-items: center;
-      padding: 10px 14px 6px;
-      font-size: 13px; color: #888;
+      padding: 10px 14px 6px; font-size: 13px; color: #888;
       position: sticky; left: 0;
     }
     #fb-info {
-      text-align: center;
-      font-size: 15px; font-weight: 500;
-      color: #aaa;
-      padding: 6px 0 8px;
-      min-height: 32px;
+      text-align: center; font-size: 15px; font-weight: 500;
+      color: #aaa; padding: 6px 0 8px; min-height: 32px;
       position: sticky; left: 0;
     }
     #fb-wrap { overflow-x: auto; padding: 0 8px 24px; }
     #fb-grid {
       display: grid;
       grid-template-columns: repeat(23, 48px);
-      gap: 3px;
-      min-width: max-content;
+      gap: 3px; min-width: max-content;
     }
     .nc {
       width: 48px; height: 48px;
       display: flex; align-items: center; justify-content: center;
-      border-radius: 0;
-      cursor: pointer;
+      border-radius: 0; cursor: pointer;
       font-size: 11px; font-weight: 500;
-      background: #2a2a2a;
-      border: 0.5px solid #444;
-      color: #ccc;
+      background: #2a2a2a; border: 0.5px solid #444; color: #ccc;
       user-select: none;
     }
     .nc.c-note { background: #cc0000; color: #fff; border-color: #990000; }
@@ -60,6 +65,12 @@
   </style>
 </head>
 <body>
+
+  <div id="unlock-screen">
+    <p>タップして開始</p>
+    <button id="unlock-btn">Guitar Fretboard を開く</button>
+  </div>
+
   <div id="header">
     <span>14 strings · 23 frets</span>
     <span>タップで演奏</span>
@@ -75,16 +86,30 @@
     const NUM_FRETS = 23;
     let audioCtx = null;
 
-    function getCtx() {
-      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      if (audioCtx.state === 'suspended') audioCtx.resume();
-      return audioCtx;
+    function unlockAudio() {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const buf = audioCtx.createBuffer(1, 1, 22050);
+      const src = audioCtx.createBufferSource();
+      src.buffer = buf;
+      src.connect(audioCtx.destination);
+      src.start(0);
+      audioCtx.resume().then(() => {
+        document.getElementById('unlock-screen').style.display = 'none';
+      });
     }
+
+    document.getElementById('unlock-btn').addEventListener('touchend', e => {
+      e.preventDefault();
+      unlockAudio();
+    });
+    document.getElementById('unlock-btn').addEventListener('click', unlockAudio);
+
     function midiToFreq(m) { return 440 * Math.pow(2, (m - 69) / 12); }
     function midiToName(m) { return NOTE_NAMES[m % 12] + (Math.floor(m / 12) - 1); }
 
     function playPluck(freq) {
-      const ctx = getCtx();
+      if (!audioCtx) return;
+      const ctx = audioCtx;
       const now = ctx.currentTime;
       const dur = Math.min(2.8, 0.5 + 2.3 * Math.pow(freq / 500, -0.4));
       const osc1 = ctx.createOscillator();
@@ -135,8 +160,7 @@
       currentLit.forEach(c => c.classList.remove('lit', 'lit-main'));
       currentLit = [];
       (cellsByName[name] || []).forEach(c => {
-        c.classList.add('lit');
-        currentLit.push(c);
+        c.classList.add('lit'); currentLit.push(c);
       });
       cell.classList.remove('lit');
       cell.classList.add('lit-main');
