@@ -13,25 +13,26 @@
     body {
       background: #1a1a1a; color: #eee;
       font-family: system-ui, sans-serif;
-      overflow-x: auto;
       -webkit-tap-highlight-color: transparent;
-      touch-action: pan-x pan-y;
     }
     #header {
       display: flex; justify-content: space-between; align-items: center;
       padding: 10px 14px 6px; font-size: 13px; color: #888;
-      position: sticky; left: 0;
     }
     #fb-info {
       text-align: center; font-size: 15px; font-weight: 500;
       color: #aaa; padding: 6px 0 8px; min-height: 32px;
-      position: sticky; left: 0;
     }
-    #fb-wrap { overflow-x: auto; padding: 0 8px 24px; }
+    #fb-wrap {
+      overflow: scroll;
+      -webkit-overflow-scrolling: touch;
+      padding: 0 8px 24px;
+    }
     #fb-grid {
       display: grid;
       grid-template-columns: repeat(23, 48px);
-      gap: 3px; min-width: max-content;
+      gap: 3px;
+      min-width: max-content;
     }
     .nc {
       width: 48px; height: 48px;
@@ -40,6 +41,7 @@
       font-size: 11px; font-weight: 500;
       background: #2a2a2a; border: 0.5px solid #444; color: #ccc;
       user-select: none;
+      touch-action: none;
     }
     .nc.c-note { background: #cc0000; color: #fff; border-color: #990000; }
     .nc.lit { background: #ff9900 !important; color: #fff !important; border-color: #cc7700 !important; }
@@ -121,7 +123,6 @@
       }
     });
 
-    // タッチIDごとにハイライトを管理
     const touchLit = {};
 
     function highlightOn(touchId, cell) {
@@ -141,10 +142,10 @@
     }
 
     grid.addEventListener('touchstart', e => {
-      e.preventDefault();
       Array.from(e.changedTouches).forEach(touch => {
         const el = document.elementFromPoint(touch.clientX, touch.clientY);
         if (el && el.classList.contains('nc')) {
+          e.preventDefault();
           highlightOn(touch.identifier, el);
           playPluck(midiToFreq(parseInt(el.dataset.midi)));
         }
@@ -152,10 +153,7 @@
     }, { passive: false });
 
     grid.addEventListener('touchend', e => {
-      e.preventDefault();
-      Array.from(e.changedTouches).forEach(touch => {
-        highlightOff(touch.identifier);
-      });
+      Array.from(e.changedTouches).forEach(touch => highlightOff(touch.identifier));
     }, { passive: false });
 
     grid.addEventListener('touchcancel', e => {
